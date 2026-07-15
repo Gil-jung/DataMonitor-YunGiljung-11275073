@@ -1,3 +1,15 @@
+import argparse
+import time
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="데이터 모니터링 Tool")
+    parser.add_argument("--interval", type=float, default=1.5, help="polling 주기(초)")
+    parser.add_argument("--filter", type=str, default=None, help="예: status=PAID")
+    parser.add_argument("--sort", type=str, default=None, help="정렬 기준 필드명")
+    return parser.parse_args(argv)
+
+
 def summarize(snapshot: list) -> dict:
     by_status: dict = {}
     for order in snapshot:
@@ -44,3 +56,48 @@ def render(snapshot: list, changed_ids: set) -> str:
         )
 
     return "\n".join(lines)
+
+
+def main_loop(store, interval, filter_expr, sort_key, sleep_fn, output_fn, max_iterations=None):
+    prev_snapshot = []
+    iterations = 0
+
+    while max_iterations is None or iterations < max_iterations:
+        try:
+            snapshot = store.snapshot()
+            changed_ids = diff_changed_ids(prev_snapshot, snapshot)
+            view = apply_sort(apply_filter(snapshot, filter_expr), sort_key)
+            output_fn(render(view, changed_ids))
+            prev_snapshot = snapshot
+        except Exception as exc:
+            output_fn(f"[오류] 데이터 조회 실패: {exc}")
+
+        sleep_fn(interval)
+        iterations += 1
+
+
+def main(argv=None):
+    from order_simulator import run_scenario
+    from store import OrderStore
+    import random
+
+    args = parse_args(argv)
+    store = OrderStore()
+    run_scenario(store, count=20, rng=random.Random(), clock=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+    def clear_and_print(text: str) -> None:
+        print("\033[2J\033[H", end="")
+        print(text)
+
+    main_loop(
+        store,
+        interval=args.interval,
+        filter_expr=args.filter,
+        sort_key=args.sort,
+        sleep_fn=time.sleep,
+        output_fn=clear_and_print,
+    )
+
+
+if __name__ == "__main__":
+    main()
