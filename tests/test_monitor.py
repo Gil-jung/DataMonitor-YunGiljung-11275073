@@ -1,4 +1,4 @@
-from monitor import apply_filter, apply_sort, diff_changed_ids, summarize
+from monitor import apply_filter, apply_sort, diff_changed_ids, render, summarize
 
 
 def orders():
@@ -61,3 +61,31 @@ def test_diff_changed_ids_no_change_returns_empty_set():
     current = [{"order_id": "o1", "status": "CREATED"}]
 
     assert diff_changed_ids(prev, current) == set()
+
+
+def test_render_shows_empty_message_when_no_data():
+    output = render([], changed_ids=set())
+
+    assert "데이터 없음" in output
+
+
+def test_render_shows_summary_and_rows():
+    output = render(orders(), changed_ids=set())
+
+    assert "총 3건" in output
+    assert "PAID: 2" in output
+    assert "CREATED: 1" in output
+    assert "o1" in output
+    assert "o2" in output
+    assert "o3" in output
+
+
+def test_render_highlights_changed_rows():
+    output = render(orders(), changed_ids={"o2"})
+
+    lines = {line.strip(): line for line in output.splitlines()}
+    o1_line = next(line for line in output.splitlines() if "o1" in line)
+    o2_line = next(line for line in output.splitlines() if "o2" in line)
+
+    assert not o1_line.strip().startswith("*")
+    assert o2_line.strip().startswith("*")
